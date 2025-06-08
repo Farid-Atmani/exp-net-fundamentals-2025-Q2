@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Configuration
+STACK_NAME="MyVPCStack"
+TEMPLATE_FILE="net_bootcamp_vpc_template.yaml"
+REGION="eu-central-1"
+AZ="eu-central-1a"
+
+# Disable AWS profile info in prompt (optional)
+export POWERLEVEL9K_AWS_SHOW=off
+
+echo "Validating CloudFormation template..."
+aws cloudformation validate-template --template-body file://$TEMPLATE_FILE
+
+# Check if the stack exists
+if aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$REGION" > /dev/null 2>&1; then
+  echo "Stack '$STACK_NAME' exists. Deploying update..."
+  aws cloudformation deploy \
+    --template-file "$TEMPLATE_FILE" \
+    --stack-name "$STACK_NAME" \
+    --region "$REGION" \
+    --parameter-overrides AvailabilityZone="$AZ" \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --no-fail-on-empty-changeset
+else
+  echo "Stack '$STACK_NAME' does not exist. Creating stack..."
+  aws cloudformation create-stack \
+    --stack-name "$STACK_NAME" \
+    --template-body file://"$TEMPLATE_FILE" \
+    --parameters ParameterKey=AvailabilityZone,ParameterValue="$AZ" \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --region "$REGION"
+
+  echo "Waiting for stack creation to complete..."
+  aws cloudformation wait stack-create-complete --stack-name "$STACK_NAME" --region "$REGION"
+fi
+
+echo "Stack deployment finished. Checking status..."
+STACK_STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$REGION" --query "Stacks[0].StackStatus" --output text)
+
+echo "Stack '$STACK_NAME' status: $STACK_STATUS"
